@@ -8,10 +8,13 @@
 # names against ClientAssembly.licenseFiles and fontFile, what the companion copies into the device app.
 license idevice.txt work/idevice/{platform}/licenses/idevice.txt
 license rust-std.html work/idevice/{platform}/licenses/rust-std.html
+license spapple.txt work/spapple/{platform}/licenses/spapple.txt
 license goodmountain.txt work/fonts/LICENSE.md
 font Goodmountain-Regular.otf work/fonts/Goodmountain-Regular.otf
 acknowledgement idevice.txt work/idevice/macos/licenses/idevice.txt
 acknowledgement rust-std.html work/idevice/macos/licenses/rust-std.html
 acknowledgement idevice-ios.txt work/idevice/ios/licenses/idevice.txt
 acknowledgement idevice-visionos.txt work/idevice/xros/licenses/idevice.txt
+acknowledgement spapple-ios.txt work/spapple/ios/licenses/spapple.txt
+acknowledgement spapple-visionos.txt work/spapple/xros/licenses/spapple.txt
 acknowledgement goodmountain.txt work/fonts/LICENSE.md

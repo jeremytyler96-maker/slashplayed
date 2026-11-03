@@ -28,7 +28,8 @@
 # spwindow.m), as a launch held until the headset is put on can do; the game must still come on screen.
 # SP_PROFILES_DRILL=1 has the launcher install every Documents/spprofiles/*.mobileprovision through the JIT
 # helper's misagent before it attaches (copy them in with devicectl), or list the app's profiles with none
-# there (launcher.m's profiles_drill).
+# there; SP_PROFILES_DRILL=apple fetches the app's renewed profiles from Apple with the device's Apple token
+# instead (push-apple-token.sh), and installs those (launcher.m's profiles_drill).
 # SP_SKIP_INTRO=1 starts the game without its intro movie or Retail's Screen Narrator question (launcher.m
 # skip_intro), for runs nobody watches. It sets them in the device's Config.wtf, so they stay skipped there.
 # SP_START=1 launches without naming a game, as the home screen does, so the start screen shows (spstart.m)

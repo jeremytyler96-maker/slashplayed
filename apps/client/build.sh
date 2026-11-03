@@ -48,7 +48,8 @@ cp ../../build/$SP_PLATFORM/exports.json "$APP"/
 # The rewrite map: spguest opens each library the client names as the shim this sends it to (spguestlaunch.m).
 cp ../../shims/generated/rewrite-map.txt "$APP"/
 # The licenses of what the app's code links: the JIT helper's idevice (MIT) with its Rust crates, and the
-# Rust standard library (scripts/build-idevice.sh writes those two from the pinned sources). And the start
+# Rust standard library (scripts/build-idevice.sh writes those two from the pinned sources); the
+# launcher's spapple with isideload (MIT) and its Rust crates (scripts/build-spapple.sh). And the start
 # screen's face, Goodmountain (spstart.m), shipped byte for byte with its license, as that license asks
 # (scripts/fetch-font.sh downloads both; neither is ever committed).
 for f in ../../work/fonts/Goodmountain-Regular.otf ../../work/fonts/LICENSE.md; do
@@ -56,6 +57,7 @@ for f in ../../work/fonts/Goodmountain-Regular.otf ../../work/fonts/LICENSE.md; 
 done
 mkdir -p "$APP"/licenses
 cp ../../work/idevice/$SP_PLATFORM/licenses/idevice.txt ../../work/idevice/$SP_PLATFORM/licenses/rust-std.html "$APP"/licenses/
+cp ../../work/spapple/$SP_PLATFORM/licenses/spapple.txt "$APP"/licenses/
 cp ../../work/fonts/LICENSE.md "$APP"/licenses/goodmountain.txt
 cp ../../work/fonts/Goodmountain-Regular.otf "$APP"/
 sp_plist Info.plist "$APP"/Info.plist $BUNDLE_ID

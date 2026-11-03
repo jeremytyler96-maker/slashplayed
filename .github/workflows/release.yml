@@ -127,6 +127,14 @@ jobs:
       - name: Fetch the start screen's font
         run: scripts/fetch-font.sh
 
+      # The launcher's profile renewal links spapple (apps/client/spapple, with the vendored isideload), from
+      # source by scripts/build-spapple.sh at its committed Cargo.lock.
+      - name: Build spapple (visionOS)
+        run: scripts/build-spapple.sh xros
+
+      - name: Build spapple (iPadOS and iOS)
+        run: scripts/build-spapple.sh ios
+
       # A throwaway keychain holding only the Developer ID identity, on the search list so codesign finds
       # it (release.sh picks the one "Developer ID Application" identity there). Its password is random
       # per run and never leaves this step: the keychain stays unlocked for the job, and deleting it

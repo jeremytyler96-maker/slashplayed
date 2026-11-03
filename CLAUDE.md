@@ -37,7 +37,10 @@ the owner asks for it.
   Goodmountain, never committed: `scripts/fetch-font.sh`), `spsettings.swift` (the start screen's Settings sheet: the sign-in's forget,
   each game's build and where it came from (`spsource-<flavor>`), Open in Files, and Reset Game Settings, Acknowledgements, and the `SP_START_DRILL` states), `sppatch.m` (the check for a newer build; its screen is `sppatchscreen.swift`; it fetches the new client with
   `spcdn.m`, the port of `BlizzardCDN.swift`, and checks its imports with `spbind.m`; both Foundation only,
-  tested in the companion's tests; an Update or an install puts that slice in place, signing nothing), `flavors.plist` (each game's
+  tested in the companion's tests; an Update or an install puts that slice in place, signing nothing), `spapple.m` (the
+  Apple token: the one file that holds it, and the app's renewed profiles from Apple through `spapple/`, a Rust
+  static library on the vendored isideload, `scripts/build-spapple.sh`; the helper installs them through misagent,
+  `spjit.m`'s `sp_jit_profiles`), `flavors.plist` (each game's
   name, `.build.info` product, client path, Battle.net arguments, and addon number: the one list, read by the
   launcher, the companion's `Flavor.swift`, and `scripts/flavor.sh`), `spguest.c`/`.h` and `spguest_tlv.S`
   (spguest, a loader of our own: the unchanged, unsigned client mapped, bound, and run without dyld;
@@ -50,7 +53,7 @@ the owner asks for it.
   entitlements templates, `icons/` (the app icon catalogs, compiled by `build-icons.sh`),
   `signing/` (stub project for the explicit-App-ID profile), and
   dev scripts (`build.sh`, the app with no game in it, `run.sh`, `seed.sh`, `seed-client.sh`, the Mac's
-  client into `Library/spgames`, `pull-logs.sh`, `grab-token.sh`, `casc_archives.py`).
+  client into `Library/spgames`, `pull-logs.sh`, `grab-token.sh`, `push-apple-token.sh`, `casc_archives.py`).
 - `apps/companion-rs/`: `slashplayed-companion`, the host tool for an iPad or iPhone without a Mac (Windows, Linux, a
   Mac without Xcode; Rust, `rust-toolchain.toml` pins it): `src/kit.rs` (the device kit, the unsigned app
   `scripts/release/device-kit.sh` makes at release), `device.rs` (usbmuxd, trust, Developer Mode, install,
@@ -88,6 +91,7 @@ the owner asks for it.
 ```sh
 scripts/build-idevice.sh macos             # once (and after re-pinning): the companion links it
 scripts/build-idevice.sh ios; scripts/build-idevice.sh xros   # the JIT helper links these
+scripts/build-spapple.sh                   # once (and after changing apps/client/spapple): the launcher links it
 scripts/fetch-font.sh                      # once: the start screen's font and its license, into work/fonts/
 shims/build.sh <xros|ios>                  # build/<platform>/*.dylib + exports.json
 apps/companion/build.sh                    # build/companion/Slashplayed Companion.app (needs xcodegen)
@@ -151,6 +155,13 @@ again (over an hour for Retail on the headset). Don't change it casually.
   ends with the process. Nothing about it is logged or stored, not even sizes, and no tracing subscriber
   is ever installed (isideload's logs would carry account data). The person types it; test runs use the
   owner's own Terminal. The tool's signing key goes only to the OS credential store, never to the device. It never revokes a certificate a Slashplayed tool didn't make.
+- **The Apple token is a credential.** The device keeps one Apple token (the `xcode.auth` app token, its
+  adsid, and the anisette server and machine identity it was made on), and only `spapple.m` handles it: in
+  the keychain (this device only, never synced), imported from `Library/spappletoken.json`, which is zeroed
+  and deleted at once, and handed to `spapple` in memory, zeroed after. Its screen keeps nothing. Never the
+  password or the GrandSlam token. Logs give the stated expiry's date only, never the token, its fields, or
+  its size; `spapple`'s errors never carry it. `push-apple-token.sh` (dev) and `slashplayed-companion` are
+  the only things that push one.
 - **Never read, print or log values from `net.battle` prefs** or the exported credentials file. Sizes
   and timestamps only, as `TokenRelay.swift` does.
 - **The Battle.net sign-in is a credential too.** Only the launcher's sign-in (`splogin.m`, and its
