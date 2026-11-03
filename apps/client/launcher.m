@@ -54,6 +54,25 @@ static void say(NSString *s) {
 
 void sp_launch_say(NSString *s) { say(s); }  // spjit.m, sppair.m, and spvpn.m log through it
 NSString *sp_jit_attach(void (^pump)(double));  // spjit.m
+NSArray<NSDictionary *> *sp_jit_profiles(NSArray<NSData *> *install, void (^pump)(double), NSString **problem);  // spjit.m
+
+// The profiles drill ($SP_PROFILES_DRILL, run.sh): before the helper attaches, installs every
+// Documents/spprofiles/*.mobileprovision through the helper's misagent (sp_jit_profiles), or with none there
+// only lists this app's profiles, so the device renewing its own profiles can be tried with no Apple sign-in.
+static NSString *profiles_drill(void (^pump)(double)) {
+    NSString *dir = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/spprofiles"];
+    NSMutableArray<NSData *> *install = [NSMutableArray array];
+    for (NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:dir error:nil]) {
+        if (![name.pathExtension isEqual:@"mobileprovision"]) continue;
+        NSData *d = [NSData dataWithContentsOfFile:[dir stringByAppendingPathComponent:name]];
+        if (d) [install addObject:d];
+    }
+    say([NSString stringWithFormat:@"profiles drill: %lu to install", (unsigned long)install.count]);
+    NSString *problem = nil;
+    NSArray *mine = sp_jit_profiles(install, pump, &problem);
+    if (mine) say([NSString stringWithFormat:@"profiles drill: %lu of this app's on the device", (unsigned long)mine.count]);
+    return problem;
+}
 NSString *sp_device_noun(void);  // spjit.m
 NSString *sp_guest_hooks_problem(void);  // spguestlaunch.m
 NSString *sp_guest_preflight(NSString *path);  // spguestlaunch.m
@@ -747,6 +766,7 @@ int main(int argc, char **argv) {
     NSString *problem = sp_guest_preflight(library);
     if (!problem) problem = copy_unfinished();
     NSMutableData *login = problem ? nil : sp_login_prepare(token, &pump, &problem);
+    if (!problem && NSProcessInfo.processInfo.environment[@"SP_PROFILES_DRILL"].length) problem = profiles_drill(pump);
     if (!problem) problem = sp_jit_attach(pump);
     if (problem) fail_launch(problem);
     if (login) sp_login_write(flavor, login);  // on failure it says so; the token or the game's login screen is left
