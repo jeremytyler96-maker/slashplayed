@@ -575,8 +575,14 @@ One run, `slashplayed-companion [install]`, which is also the weekly re-sign on 
    - The RemotePairing record (`Library/sppairing.plist`, as `Pairing.send`), when the app has none or
      with `--pair-again`.
    - The developer disk image (below).
+   - The Apple token as `Library/spappletoken.json`, every run: the `xcode.auth` app token from this
+     sign-in, its adsid, and the anisette server and machine identity it was made on
+     (`account::device_token`). The launcher imports it into its keychain (`spapple.m`) and gets the app's
+     renewed profiles from Apple with it. Not with `--server-client-info`, whose client identity the
+     device doesn't claim.
 
-   Nothing else: the device installs and updates games with no credential on it.
+   Nothing else: the device installs and updates games with no credential on it. The token is only for
+   the app's own profiles.
 
 **The signing key** stays between runs in the OS credential store, never a file: the macOS Keychain,
 Windows Credential Manager, or the Secret Service on Linux (`src/keystore.rs`). There's one item per

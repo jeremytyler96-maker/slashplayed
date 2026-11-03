@@ -152,9 +152,12 @@ again (over an hour for Retail on the headset). Don't change it casually.
   credentials. Test fixtures are built from our own code (`research/loadertest` is the model).
 - **The Apple ID is a credential.** `slashplayed-companion` (`apps/companion-rs/src/account.rs`) takes the password
   typed by the person, uses it once for the sign-in, and zeroes it; the login lives in memory only and
-  ends with the process. Nothing about it is logged or stored, not even sizes, and no tracing subscriber
-  is ever installed (isideload's logs would carry account data). The person types it; test runs use the
-  owner's own Terminal. The tool's signing key goes only to the OS credential store, never to the device. It never revokes a certificate a Slashplayed tool didn't make.
+  ends with the process. Nothing about it is logged or stored on the computer, not even sizes, and no
+  tracing subscriber is ever installed (isideload's logs would carry account data). The one thing that
+  outlives the process is the Apple token this sign-in makes, which goes only to the device, for the app to
+  renew its own profiles (the next rule). The person types it; test runs use the owner's own Terminal. The
+  tool's signing key goes only to the OS credential store, never to the device. It never revokes a
+  certificate a Slashplayed tool didn't make.
 - **The Apple token is a credential.** The device keeps one Apple token (the `xcode.auth` app token, its
   adsid, and the anisette server and machine identity it was made on), and only `spapple.m` handles it: in
   the keychain (this device only, never synced), imported from `Library/spappletoken.json`, which is zeroed
