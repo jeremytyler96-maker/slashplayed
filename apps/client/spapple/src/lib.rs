@@ -108,6 +108,16 @@ impl Drop for MemoryStorage {
     }
 }
 
+/// A failure as one line, its chain of contexts only ("what failed <- why"): not the report's own format, which
+/// spans lines and names source files, nor its attachments, where isideload puts response bodies.
+fn one_line(e: &Report) -> String {
+    e.iter_reports()
+        .map(|n| n.format_current_context().to_string().trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" <- ")
+}
+
 /// The developer-services or GrandSlam error number in a failure, if Apple sent one.
 fn apple_code(e: &Report) -> Option<i64> {
     e.iter_reports().find_map(|n| match n.downcast_current_context::<SideloadError>() {
@@ -195,7 +205,7 @@ fn call(request: &[u8]) -> Value {
     match result {
         Ok(v) => v,
         Err(e) => {
-            let mut v = json!({ "ok": false, "error": format!("{e}") });
+            let mut v = json!({ "ok": false, "error": one_line(&e) });
             if let Some(code) = apple_code(&e) {
                 v["code"] = json!(code);
             }

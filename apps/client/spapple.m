@@ -182,3 +182,156 @@ NSDictionary *sp_apple_profiles(NSString *team, NSString *app, NSString **proble
     }
     return @{@"app": a, @"helper": h};
 }
+
+// ---- Renewing the app's profiles at launch
+
+NSArray<NSDictionary *> *sp_jit_profiles(NSArray<NSData *> *install, void (^pump)(double), NSString **problem);  // spjit.m
+NSDictionary *sp_profile_plist(NSData *profile);  // spjit.m
+NSString *sp_profile_app_id(NSData *profile);  // spjit.m
+NSString *sp_app_id(void);  // spjit.m
+void sp_launch_say(NSString *s);  // launcher.m
+
+static void say(NSString *s) { sp_launch_say([@"renew: " stringByAppendingString:s]); }
+
+// Renew when the app's latest profile has less than this left (owner, 2026-11-03: about 3 days, so a week's
+// free profile renews on any launch in its last 3 days).
+static const double renew_within = 3 * 86400;
+
+// Copies of the profiles a renewal installed: iOS checks the app against every installed profile, but the
+// app can't read the device's list without the helper's tunnel, so these are what it knows it has.
+static NSString *copies_dir(void) { return home(@"Library/spprofiles"); }
+
+static NSArray<NSString *> *sp_profile_copies(void) {
+    NSMutableArray *paths = [NSMutableArray array];
+    for (NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:copies_dir() error:nil])
+        if ([name.pathExtension isEqual:@"mobileprovision"]) [paths addObject:[copies_dir() stringByAppendingPathComponent:name]];
+    return paths;
+}
+
+static NSString *app_dir(void) { return NSBundle.mainBundle.bundlePath; }
+
+// The latest expiry of a profile for this app (not its helper) the launcher knows: its embedded one and the
+// renewals' copies. Nil when it can't tell.
+NSDate *sp_profile_expiry(void) {
+    NSString *appid = sp_app_id();
+    NSDate *latest = nil;
+    NSMutableArray *paths = [NSMutableArray arrayWithObject:[app_dir() stringByAppendingPathComponent:@"embedded.mobileprovision"]];
+    [paths addObjectsFromArray:sp_profile_copies()];
+    for (NSString *path in paths) {
+        NSData *d = [NSData dataWithContentsOfFile:path];
+        if (!appid || ![sp_profile_app_id(d) isEqual:appid]) continue;
+        NSDate *e = sp_profile_plist(d)[@"ExpirationDate"];
+        if ([e isKindOfClass:NSDate.class] && (!latest || [e compare:latest] == NSOrderedDescending)) latest = e;
+    }
+    return latest;
+}
+
+// The start screen's word on the renewal (Library/sprenew.txt, one line): "ok <day>" (the app's profiles
+// last until then), "signin <day>" (renewing needs an Apple sign-in on this device, and the app stops
+// opening after that day), or "failed <day>" (it couldn't renew this time; it tries again next launch).
+static void write_state(NSString *word, NSDate *until) {
+    NSString *line = [NSString stringWithFormat:@"%@ %@\n", word, until ? day(until) : @"unknown"];
+    [line writeToFile:home(@"Library/sprenew.txt") atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+// Deletes the copies that have expired: they list nothing and keep the app open no longer.
+static void prune_copies(void) {
+    for (NSString *path in sp_profile_copies()) {
+        NSDate *e = sp_profile_plist([NSData dataWithContentsOfFile:path])[@"ExpirationDate"];
+        if (![e isKindOfClass:NSDate.class] || e.timeIntervalSinceNow < 0) [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+    }
+}
+
+// Apple's refusals that mean the token itself no longer works, so only a new sign-in helps (as opposed to the
+// network or Apple being down, which the next launch retries). GrandSlam's auth errors, and the developer
+// services' "not signed in" family; anything unknown counts as a retry, never as a reason to ask.
+static BOOL token_refused(NSNumber *code, NSString *problem) {
+    if (code) {
+        long c = code.longValue;
+        if (c == 1100 || c == 1101 || c == 401 || (c <= -22000 && c > -23000)) return YES;
+    }
+    return [problem rangeOfString:@"401"].location != NSNotFound;
+}
+
+// Every launch of a game, before the helper attaches: when the app's profiles have less than 3 days left
+// (SP_RENEW=now: whatever's left; SP_RENEW=off: never), new ones from Apple with the keychain's token, installed
+// by the helper, with copies kept in Library/spprofiles. It never stops the launch: the profiles still have
+// days left, and the start screen says when the next launch can't fix it alone (Library/sprenew.txt).
+void sp_profiles_renew(void (^pump)(double)) {
+    NSString *mode = NSProcessInfo.processInfo.environment[@"SP_RENEW"];
+    if ([mode isEqual:@"off"]) return;
+    prune_copies();
+    NSDate *until = sp_profile_expiry();
+    double left = until ? until.timeIntervalSinceNow : 0;
+    if (![mode isEqual:@"now"] && until && left > renew_within) {
+        write_state(@"ok", until);
+        return;
+    }
+    NSString *appid = sp_app_id();
+    NSRange dot = [appid rangeOfString:@"."];
+    if (dot.location == NSNotFound) {
+        say(@"no App ID in the embedded profile; not renewing");
+        return;
+    }
+    say([NSString stringWithFormat:@"the app's profiles last until %@ (%.1f days)%@", until ? day(until) : @"an unknown day",
+         left / 86400, [mode isEqual:@"now"] ? @"; renewing now (SP_RENEW=now)" : @"; renewing"]);
+    if (!sp_apple_token_present()) {
+        say(@"no Apple token: renewing needs an Apple sign-in on this device");
+        write_state(@"signin", until);
+        return;
+    }
+    // Off the main thread (it blocks on the network), with the launch's pump turning meanwhile. Waited for up to
+    // 60 s: past that the launch goes on, since the profiles still have days left, and the next launch retries.
+    __block NSDictionary *got = nil;
+    __block NSString *why = nil;
+    __block NSNumber *code = nil;
+    __block BOOL done = NO;
+    NSObject *lock = [NSObject new];
+    double t = CFAbsoluteTimeGetCurrent();
+    NSString *team = [appid substringToIndex:dot.location], *bundle = [appid substringFromIndex:dot.location + 1];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSString *w = nil;
+        NSNumber *c = nil;
+        NSDictionary *g = sp_apple_profiles(team, bundle, &w, &c);
+        @synchronized (lock) {
+            got = g, why = w, code = c, done = YES;
+        }
+    });
+    for (double end = CFAbsoluteTimeGetCurrent() + 60;;) {
+        @synchronized (lock) {
+            if (done) break;
+        }
+        if (CFAbsoluteTimeGetCurrent() > end) {
+            say(@"Apple didn't answer within 60 s; the next launch tries again");
+            write_state(@"failed", until);
+            return;
+        }
+        pump(0.05);
+    }
+    if (!got) {
+        BOOL refused = token_refused(code, why);
+        say([NSString stringWithFormat:@"Apple's profiles didn't come after %.2f s (%@%@)%@", CFAbsoluteTimeGetCurrent() - t, why,
+             code ? [NSString stringWithFormat:@", code %@", code] : @"", refused ? @": the token no longer works" : @"; the next launch tries again"]);
+        write_state(refused ? @"signin" : @"failed", until);
+        return;
+    }
+    say([NSString stringWithFormat:@"Apple's profiles in %.2f s", CFAbsoluteTimeGetCurrent() - t]);
+    NSString *problem = nil;
+    NSArray *mine = sp_jit_profiles(@[got[@"app"], got[@"helper"]], pump, &problem);
+    if (!mine) {
+        // Not the launch's problem: the attach right after says what's wrong with the helper, if anything is.
+        say([@"the helper didn't install them: " stringByAppendingString:problem ?: @"no reason"]);
+        write_state(@"failed", until);
+        return;
+    }
+    [NSFileManager.defaultManager createDirectoryAtPath:copies_dir() withIntermediateDirectories:YES attributes:nil error:nil];
+    for (NSString *which in @[@"app", @"helper"]) {
+        NSData *d = got[which];
+        NSString *uuid = sp_profile_plist(d)[@"UUID"];
+        if ([uuid isKindOfClass:NSString.class]) [d writeToFile:[copies_dir() stringByAppendingPathComponent:[uuid stringByAppendingPathExtension:@"mobileprovision"]] atomically:YES];
+    }
+    NSDate *now = sp_profile_expiry();
+    say([NSString stringWithFormat:@"renewed: the app's profiles last until %@", now ? day(now) : @"an unknown day"]);
+    write_state(@"ok", now);
+    return;
+}

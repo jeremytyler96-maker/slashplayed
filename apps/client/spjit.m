@@ -210,6 +210,12 @@ static NSString *session(void (^*pump)(double), NSData **pairing_out, NSDictiona
         if ((problem = sp_vpn_wait(pump, noun))) return problem;
         say([NSString stringWithFormat:@"pairing record: %lu bytes", (unsigned long)pairing.length]);
         status = sp_jit_request(@{@"op": @"status", @"pairing": pairing, @"endpoints": ENDPOINTS}, 30, *pump);
+        // Once more when a started helper never answered: right after a renewal installed the helper's own new
+        // profile, one start in about seven did that (iPhone, iOS 27), and the next start answered at once.
+        if (!status) {
+            say(@"the helper didn't answer the status request: starting it again");
+            status = sp_jit_request(@{@"op": @"status", @"pairing": pairing, @"endpoints": ENDPOINTS}, 30, *pump);
+        }
         if (!status) {
             return @"Slashplayed's helper didn't start.\n\nInstall Slashplayed again from Slashplayed Companion on your Mac.";
         }

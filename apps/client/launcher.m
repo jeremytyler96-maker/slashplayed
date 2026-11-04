@@ -57,45 +57,19 @@ NSString *sp_jit_attach(void (^pump)(double));  // spjit.m
 NSArray<NSDictionary *> *sp_jit_profiles(NSArray<NSData *> *install, void (^pump)(double), NSString **problem);  // spjit.m
 NSString *sp_apple_token_import(void);  // spapple.m
 NSString *sp_apple_token_describe(void);  // spapple.m
-NSDictionary *sp_apple_profiles(NSString *team, NSString *app, NSString **problem, NSNumber **code);  // spapple.m
-NSString *sp_app_id(void);  // spjit.m
 
-// The profiles drill ($SP_PROFILES_DRILL, run.sh): before the helper attaches, installs profiles through the
-// helper's misagent (sp_jit_profiles). `apple`: the app's and its helper's renewed ones, fetched from Apple
-// with the keychain's token (spapple.m). Anything else: every Documents/spprofiles/*.mobileprovision, or with
-// none there only a list of this app's profiles.
+void sp_profiles_renew(void (^pump)(double));  // spapple.m
+
+// The profiles drill ($SP_PROFILES_DRILL, run.sh): before the helper attaches, installs every
+// Documents/spprofiles/*.mobileprovision through the helper's misagent (sp_jit_profiles), or with none there
+// only lists this app's profiles. (Renewing from Apple is sp_profiles_renew, every launch: SP_RENEW=now.)
 static NSString *profiles_drill(void (^pump)(double)) {
     NSMutableArray<NSData *> *install = [NSMutableArray array];
-    if ([NSProcessInfo.processInfo.environment[@"SP_PROFILES_DRILL"] isEqual:@"apple"]) {
-        NSString *appid = sp_app_id();
-        NSRange dot = [appid rangeOfString:@"."];
-        if (dot.location == NSNotFound) return @"profiles drill: no App ID in the embedded profile";
-        __block NSDictionary *got = nil;
-        __block NSString *why = nil;
-        __block NSNumber *code = nil;
-        __block BOOL done = NO;
-        double t = CFAbsoluteTimeGetCurrent();
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            NSString *w = nil;
-            NSNumber *c = nil;
-            NSDictionary *g = sp_apple_profiles([appid substringToIndex:dot.location], [appid substringFromIndex:dot.location + 1], &w, &c);
-            dispatch_async(dispatch_get_main_queue(), ^{
-                got = g, why = w, code = c, done = YES;
-            });
-        });
-        while (!done) pump(0.05);
-        if (!got) return [NSString stringWithFormat:@"profiles drill: Apple's profiles didn't come (%@%@)", why,
-                          code ? [NSString stringWithFormat:@", code %@", code] : @""];
-        say([NSString stringWithFormat:@"profiles drill: Apple's profiles in %.2f s", CFAbsoluteTimeGetCurrent() - t]);
-        [install addObject:got[@"app"]];
-        [install addObject:got[@"helper"]];
-    } else {
-        NSString *dir = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/spprofiles"];
-        for (NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:dir error:nil]) {
-            if (![name.pathExtension isEqual:@"mobileprovision"]) continue;
-            NSData *d = [NSData dataWithContentsOfFile:[dir stringByAppendingPathComponent:name]];
-            if (d) [install addObject:d];
-        }
+    NSString *dir = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/spprofiles"];
+    for (NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:dir error:nil]) {
+        if (![name.pathExtension isEqual:@"mobileprovision"]) continue;
+        NSData *d = [NSData dataWithContentsOfFile:[dir stringByAppendingPathComponent:name]];
+        if (d) [install addObject:d];
     }
     say([NSString stringWithFormat:@"profiles drill: %lu to install", (unsigned long)install.count]);
     NSString *problem = nil;
@@ -800,6 +774,9 @@ int main(int argc, char **argv) {
     if (!problem) problem = copy_unfinished();
     NSMutableData *login = problem ? nil : sp_login_prepare(token, &pump, &problem);
     if (!problem && NSProcessInfo.processInfo.environment[@"SP_PROFILES_DRILL"].length) problem = profiles_drill(pump);
+    // The app's own profiles, renewed from Apple when they're near their end (spapple.m): after the sign-in and
+    // before the attach, since the helper installs them through the same tunnel. It never stops the launch.
+    if (!problem) sp_profiles_renew(pump);
     if (!problem) problem = sp_jit_attach(pump);
     if (problem) fail_launch(problem);
     if (login) sp_login_write(flavor, login);  // on failure it says so; the token or the game's login screen is left
