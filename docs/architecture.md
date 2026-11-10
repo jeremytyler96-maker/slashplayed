@@ -64,7 +64,9 @@ The entitlements are `get-task-allow` (a debugger may attach; development signin
 more than the default ~5 GB limit; with them it's ~8 GB). A free Personal Team can't have
 `extended-virtual-addressing` (Apple refuses the profile), so the companion leaves it out for one;
 `increased-memory-limit` alone runs every flavor, Retail included. A free team's profile lasts 7 days,
-and the companion re-signs within two days of that.
+and the companion re-signs within two days of that. A device set up by `slashplayed-companion` renews its
+own profiles instead ([Renewing the app's profiles](#the-on-device-jit-helper)), so it doesn't need the
+computer again for them.
 
 Every third-party component that ships carries its license text, generated at build time from the
 pinned sources. The device app's `licenses/` has idevice's with every Rust crate the JIT helper links and the Rust standard library's notices
@@ -142,6 +144,21 @@ for its App ID, not only the one it embeds, so a renewed profile keeps the app o
 and no reinstall. The launcher's `sp_jit_profiles` hands over only the app's and its helper's own
 profiles; the profiles drill (`SP_PROFILES_DRILL`, `run.sh`) tries it from files in
 `Documents/spprofiles/`.
+
+**Renewing the app's profiles** (`spapple.m`'s `sp_profiles_renew`) uses that request at every launch of a
+game, after the sign-in and before the attach. When the app's or its helper's profiles have less than 3
+days left (the earlier of the two: the embedded ones and the copies of earlier renewals in
+`Library/spprofiles/`), the launcher asks Apple for new ones with the Apple token the device keeps (below:
+`slashplayed-companion` pushes it), through `spapple`, a Rust static library on the vendored isideload
+(`scripts/build-spapple.sh`). A free team's App IDs lapse 7 days after they're made, so one that's gone is
+made again first, under the same identifier, with increased-memory-limit for the app's; the profiles
+already on the device stay valid until their own day either way. The helper installs the new pair and
+the launcher keeps copies. Nothing stops the launch: on a failure the profiles still have days left.
+`Library/sprenew.txt` (`ok`, `failed`, or `signin`, with the time the app stops opening) is what the start
+screen reads: it says under the logo when the next launch may retry alone (`failed`) or when the token is
+missing or refused and the tool has to run again (`signin`), with the day. Settings shows Signed Until and,
+with a token, Forget Apple Token. `SP_RENEW=now|off` (`run.sh`) forces or skips it. Without a token (a Mac
+companion's install), nothing is renewed and the companion re-signs as before.
 
 A launch with the image mounted takes about 1.5 s from start to attached. On iOS the launcher shows
 the scene first (see [iPad](#ipad)), and if the helper can't do its part, the launcher puts the reason
@@ -533,7 +550,8 @@ the device installs and updates games, picks their region, and writes `.build.in
 addons. **Vision Pro stays Mac-only:** there's no public visionOS developer disk image besides Xcode's, and
 pairing a headset without a Mac is unproven. The tool refuses a headset.
 
-One run, `slashplayed-companion [install]`, which is also the weekly re-sign on a free team:
+One run, `slashplayed-companion [install]`, which also signs the app again whenever the device can't renew
+its own profiles:
 
 1. **The device kit** (`src/kit.rs`): the device app, unsigned and, like every build of it, with no game
    in it, one per platform, which `scripts/release/device-kit.sh` assembles at release from what

@@ -27,8 +27,9 @@ You install the games on the device itself: open Slashplayed and tap one.
   - **Windows:** install **Apple Devices** from the Microsoft Store (or iTunes from apple.com).
   - **Linux:** install **usbmuxd** (most distributions package it) and make sure it's running.
 - **An Apple ID.**
-  - **A free one works.** The app then has to be signed again every 7 days, by running the tool again.
-    A paid Apple Developer Program membership signs it for a year.
+  - **A free one works.** Its signing lasts 7 days, and Slashplayed renews it on the device itself when
+    you play in the last 3 days before it runs out. A paid Apple Developer Program membership signs it
+    for a year.
   - **Use a secondary Apple ID for a free team.** The tool signs in the way sideloading tools do, which
     Apple doesn't officially support.
 - **[LocalDevVPN](https://apps.apple.com/app/id6755608044)** from the App Store, on when a game starts,
@@ -52,8 +53,10 @@ You install the games on the device itself: open Slashplayed and tap one.
    & Device Management** on the device and trust your Apple ID.
 8. Open Slashplayed and tap a game to install it.
 
-To sign the app again, run the tool again, the same way. Your games and settings stay. On a free Apple ID,
-do this within 7 days of the last run, or the app won't open until you do.
+Slashplayed keeps its own signing up to date: when a game starts in the last 3 days before it runs out,
+the app gets new signing profiles from Apple, over the internet, with the token the tool gave it. If it
+can't, the start screen says so and on which day the app stops opening. Then run the tool again, the
+same way, before that day. Your games and settings stay.
 
 ### Options
 
@@ -112,6 +115,10 @@ Test builds are posted as **prereleases** on the
   server was refused. Try again later, or another server with `--anisette`.
 - **"the team can make N more App ID(s)":** a free Apple ID can make 10 App IDs a week, and Slashplayed
   needs 2 the first time. Wait a few days.
-- **The app won't open:** on a free Apple ID, it's been more than 7 days. Run the tool again.
+- **The start screen says Slashplayed can't renew its signing on its own:** Apple no longer takes the
+  token the tool gave the device, or the tool ran with `--server-client-info`, which gives none. Run the
+  tool again before the day it names.
+- **The app won't open:** its signing ran out. On a free Apple ID that's 7 days after the last renewal or
+  run, when no game was started in the last 3 of them. Run the tool again.
 
 More is in [troubleshooting](troubleshooting.md).

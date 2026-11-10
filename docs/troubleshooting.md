@@ -68,7 +68,7 @@ free teams the `extended-virtual-addressing` entitlement, so the companion leave
 
 - **The signature lasts 7 days.** After that the device won't open Slashplayed. Within two days of
   that, the main window warns and offers **Rebuild Now**, and **Play** signs the app again on its
-  own. Rebuilding is about a minute on the Mac plus an install; the game files on the device stay.
+  own. In its last 3 days the device's start screen says so too, with the day it stops opening. Rebuilding is about a minute on the Mac plus an install; the game files on the device stay.
 - **Trust the developer once.** The first launch on each device fails with "Untrusted Developer".
   On the device open **Settings > General > VPN & Device Management**, tap your Apple ID under
   Developer App, tap **Trust**, then press **Retry Launch** in the companion.
