@@ -28,6 +28,14 @@ NSString *sp_game_set_region(NSString *flavor, NSString *region);
 NSArray<NSString *> *sp_regions(void);
 NSString *sp_region_name(NSString *region);
 
+// spapple.m. The renewal's word for the start screen (sp_profiles_note: nil when there's nothing to say), when
+// the app stops opening (sp_profile_expiry, nil when it can't tell), and Settings' Forget Apple Token: whether
+// there's a token and forgetting it (a line for the log). Never the token or anything in it.
+NSString *_Nullable sp_profiles_note(void);
+NSDate *_Nullable sp_profile_expiry(void);
+BOOL sp_apple_token_present(void);
+NSString *sp_apple_token_forget(void);
+
 // spjit.m: "iPad", "iPhone", or "Vision Pro".
 NSString *sp_device_noun(void);
 

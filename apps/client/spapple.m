@@ -212,13 +212,10 @@ static NSArray<NSString *> *sp_profile_copies(void) {
 
 static NSString *app_dir(void) { return NSBundle.mainBundle.bundlePath; }
 
-// The latest expiry of a profile for this app (not its helper) the launcher knows: its embedded one and the
-// renewals' copies. Nil when it can't tell.
-NSDate *sp_profile_expiry(void) {
-    NSString *appid = sp_app_id();
+// The latest expiry of the profiles the launcher knows for one App ID: the embedded ones (the app's and its
+// helper's) and the renewals' copies. Nil when there's none.
+static NSDate *latest_for(NSString *appid, NSArray<NSString *> *paths) {
     NSDate *latest = nil;
-    NSMutableArray *paths = [NSMutableArray arrayWithObject:[app_dir() stringByAppendingPathComponent:@"embedded.mobileprovision"]];
-    [paths addObjectsFromArray:sp_profile_copies()];
     for (NSString *path in paths) {
         NSData *d = [NSData dataWithContentsOfFile:path];
         if (!appid || ![sp_profile_app_id(d) isEqual:appid]) continue;
@@ -228,12 +225,45 @@ NSDate *sp_profile_expiry(void) {
     return latest;
 }
 
-// The start screen's word on the renewal (Library/sprenew.txt, one line): "ok <day>" (the app's profiles
-// last until then), "signin <day>" (renewing needs an Apple sign-in on this device, and the app stops
-// opening after that day), or "failed <day>" (it couldn't renew this time; it tries again next launch).
+// When the app stops opening: the earlier of its own profiles' last day and its helper's, since without the
+// helper's (PlugIns/SPJitHelper.appex, App ID <app>.helper) no game loads either. Both come from one renewal,
+// so they match in practice. Nil when the app's can't be told; the app's alone when the helper's can't.
+NSDate *sp_profile_expiry(void) {
+    NSString *appid = sp_app_id();
+    NSMutableArray *paths = [NSMutableArray arrayWithObjects:[app_dir() stringByAppendingPathComponent:@"embedded.mobileprovision"],
+                             [app_dir() stringByAppendingPathComponent:@"PlugIns/SPJitHelper.appex/embedded.mobileprovision"], nil];
+    [paths addObjectsFromArray:sp_profile_copies()];
+    NSDate *app = latest_for(appid, paths), *helper = latest_for([appid stringByAppendingString:@".helper"], paths);
+    return app && helper && [helper compare:app] == NSOrderedAscending ? helper : app;
+}
+
+// The start screen's word on the renewal (Library/sprenew.txt, one line): "ok <time>" (the app's profiles
+// last until then), "signin <time>" (renewing needs a new Apple token on this device, and the app stops
+// opening at that time), or "failed <time>" (it couldn't renew this time; it tries again next launch). The
+// time is ISO 8601 in UTC, so the note can give the person's own day; "unknown" when it can't be told.
 static void write_state(NSString *word, NSDate *until) {
-    NSString *line = [NSString stringWithFormat:@"%@ %@\n", word, until ? day(until) : @"unknown"];
+    NSString *line = [NSString stringWithFormat:@"%@ %@\n", word, until ? [[NSISO8601DateFormatter new] stringFromDate:until] : @"unknown"];
     [line writeToFile:home(@"Library/sprenew.txt") atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+// What the start screen says under the games about the renewal, from Library/sprenew.txt: nothing when it's
+// fine (or nothing's been tried yet), else why the app may stop opening, with the day, in the person's words.
+NSString *sp_profiles_note(void) {
+    NSString *line = [NSString stringWithContentsOfFile:home(@"Library/sprenew.txt") encoding:NSUTF8StringEncoding error:nil];
+    NSArray *parts = [[line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] componentsSeparatedByString:@" "];
+    if (parts.count != 2 || [parts[0] isEqual:@"ok"]) return nil;
+    NSDate *until = [[NSISO8601DateFormatter new] dateFromString:parts[1]];
+    if (until && until.timeIntervalSinceNow < 0) return nil;  // past it the app doesn't open, so a note left is stale
+    NSString *when = @"soon";
+    if (until && [NSCalendar.currentCalendar isDateInToday:until]) when = @"later today";
+    else if (until && [NSCalendar.currentCalendar isDateInTomorrow:until]) when = @"tomorrow";
+    else if (until) when = [@"on " stringByAppendingString:[NSDateFormatter localizedStringFromDate:until dateStyle:NSDateFormatterMediumStyle
+                                                                                            timeStyle:NSDateFormatterNoStyle]];
+    if ([parts[0] isEqual:@"signin"])
+        return [NSString stringWithFormat:@"Slashplayed can’t renew its signing on its own, so it stops opening %@. Before then, "
+                                          @"run Slashplayed Companion again on the computer you set it up with.", when];
+    return [NSString stringWithFormat:@"Slashplayed couldn’t renew its signing. It tries again the next time a game starts "
+                                      @"online, and stops opening %@ if it can’t.", when];
 }
 
 // Deletes the copies that have expired: they list nothing and keep the app open no longer.

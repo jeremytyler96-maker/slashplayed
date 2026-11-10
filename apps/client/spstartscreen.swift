@@ -106,9 +106,12 @@ private struct Emblem: View {
 
 // The logo with the two faint rings around it (1.7 and 2.6 times its size, the outer at 60%) and the
 // SLASHPLAYED line. The rings pass behind the line and past the window's edges, as in the design, and take
-// no room in the layout.
+// no room in the layout. Under the line, the profile renewal's note when there is one (StartModel.note), at
+// the inner ring's width (240 points at least) so it wraps there: with the logo it stays in view, where
+// under the games it would scroll out of it.
 private struct Header: View {
     let emblem: CGFloat
+    let note: String?
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
@@ -135,6 +138,14 @@ private struct Header: View {
                 // The screen's heading, spelled out (as written, it'd be read letter by letter).
                 .accessibilityLabel("Slashplayed")
                 .accessibilityAddTraits(.isHeader)
+            if let note {
+                Text(note)
+                    .font(Font(small as CTFont))
+                    .foregroundStyle(gold)
+                    .multilineTextAlignment(.center)
+                    .frame(width: max((emblem * 1.7).rounded(), 240))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .fixedSize()
     }
@@ -147,6 +158,8 @@ private final class StartModel: ObservableObject {
     let flavors: [String]
     let installable: Set<String>  // no image on the device yet: the launcher installs the one tapped
     let pick: (String) -> Void
+    // The profile renewal's word, when the app may stop opening (spapple.m's sp_profiles_note), under the logo.
+    let note = sp_profiles_note() as String?
     weak var host: UIViewController?
 
     init(flavors: [String], installable: Set<String>, pick: @escaping (String) -> Void) {
@@ -182,7 +195,7 @@ private struct StartView: View {
             let window = geo.size
             let layout = StartLayout(window: window, safe: model.safe, big: typeSize.isAccessibilitySize, header: logo, games: games)
             ZStack(alignment: .topLeading) {
-                Header(emblem: StartLayout.emblem(window))
+                Header(emblem: StartLayout.emblem(window), note: model.note)
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { logo = $0 }
                     .offset(x: layout.header.minX, y: layout.header.minY)
                 gameList(layout)
