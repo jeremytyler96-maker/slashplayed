@@ -1,6 +1,6 @@
 // slashplayed-companion: sets up Slashplayed on an iPad or iPhone from Windows, Linux, or a Mac, with no Xcode
 // and no Mac companion (docs/setup-without-a-mac.md; how it works: docs/architecture.md, "The host tool").
-// Run it again to re-sign: weekly on a free Apple ID, yearly on a paid one. Each run:
+// Run it again to re-sign when the app can't renew its own profiles (its start screen says so). Each run:
 //
 //   1. the device kit (the device app, unsigned: kit.rs), downloaded and checked, before anything else;
 //   2. the device over USB: trusted by this computer, Developer Mode on (device.rs);
@@ -56,7 +56,8 @@ Options for install:
   --revoke-oldest       with no credential store, at the team's certificate limit: revoke the oldest
                         certificate a Slashplayed tool made, even another computer's
 
-Run it again to re-sign: within 7 days on a free Apple ID, within a year on a paid one.
+Slashplayed renews its own signing on the device when a game starts near its end. Run this again if
+its start screen says it can't.
 Your Apple ID password is used once for the sign-in and never stored.";
 
 struct Args {
@@ -232,6 +233,7 @@ async fn install(args: &Args) -> Result<(), Report> {
     }
     // The Apple token: with it the app gets its own renewed profiles from Apple (apps/client/spapple.m),
     // so it keeps opening with no computer. The launcher imports it into its keychain and deletes the file.
+    let renews = device_token.is_some();
     match device_token {
         Some(t) => {
             device::put(&mut afc, "Library/spappletoken.json", &t).await?;
@@ -245,8 +247,13 @@ async fn install(args: &Args) -> Result<(), Report> {
     eprintln!("Slashplayed is on {}.", d.name);
     if free {
         eprintln!(
-            "It's signed with a free Apple ID: the first time, trust it in Settings > General > VPN & Device Management. Run this again within 7 days, or the app stops opening."
+            "It's signed with a free Apple ID: the first time, trust it in Settings > General > VPN & Device Management."
         );
+        if renews {
+            eprintln!("Its signing lasts 7 days. It renews itself when a game starts in the last 3; if it can't, its start screen says so, and running this again fixes it.");
+        } else {
+            eprintln!("Run this again within 7 days, or the app stops opening.");
+        }
     }
     eprintln!("Open Slashplayed and tap a game to install it on the device.");
     Ok(())
