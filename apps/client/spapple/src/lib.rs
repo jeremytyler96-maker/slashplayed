@@ -6,7 +6,8 @@
 //   "profiles": with the Apple token the device keeps ("token": what spappletoken.m stores), downloads the
 //     team provisioning profiles of the App IDs "app" and "helper" on team "team". The reply's "app" and
 //     "helper" are the profile files (base64), and "anisette_state" is set when the anisette server
-//     re-provisioned this device's machine identity, for the caller to store with the token.
+//     re-provisioned this device's machine identity, for the caller to store with the token. "remade" lists the
+//     App IDs that had lapsed and were made again first (a free team's last 7 days).
 // Every reply has "ok"; a failed one has "error" (for the log and the person) and, when Apple answered with
 // one, "code": its developer-services or GrandSlam error number.
 //
@@ -151,7 +152,32 @@ async fn profiles(req: ProfilesRequest) -> Result<Value, Report> {
         .into_iter()
         .find(|t| t.team_id == req.team)
         .ok_or_else(|| report!("this Apple ID isn't on the team {}", req.team))?;
-    let ids = session.list_app_ids(&team, None).await?;
+    // A free team's App IDs lapse 7 days after they're made (Apple's "Choosing a Membership"; seen on the
+    // free spike, whose helper's was gone after 9 days), and a team profile can't be had for one that's gone.
+    // So one that's missing is made again, under the same identifier, as slashplayed-companion makes it
+    // (provision.rs's app_ids), and the app's gets increased-memory-limit back, the one capability a free
+    // team's app is signed with (its profile must grant it). The profiles the device already has stay valid
+    // until their own day, whatever becomes of the App ID: a lapsed one only stops the next download.
+    let mut ids = session.list_app_ids(&team, None).await?;
+    let missing: Vec<String> = [req.app.clone(), req.helper.clone()]
+        .into_iter()
+        .filter(|b| !ids.app_ids.iter().any(|a| &a.identifier == b))
+        .collect();
+    if !missing.is_empty() {
+        if let Some(avail) = ids.available_quantity
+            && avail < missing.len() as i64
+        {
+            return Err(report!(
+                "the team's App IDs for Slashplayed lapsed, and it can make {avail} more right now ({} needed): a free team makes 10 a week",
+                missing.len()
+            ));
+        }
+        for b in &missing {
+            let name = if *b == req.helper { "Slashplayed helper" } else { "Slashplayed" };
+            session.add_app_id(&team, name, b, None).await?;
+        }
+        ids = session.list_app_ids(&team, None).await?;
+    }
     let find = |b: &str| {
         ids.app_ids
             .iter()
@@ -160,6 +186,9 @@ async fn profiles(req: ProfilesRequest) -> Result<Value, Report> {
             .ok_or_else(|| report!("the team has no App ID {b}"))
     };
     let (app_id, helper_id) = (find(&req.app)?, find(&req.helper)?);
+    if missing.contains(&req.app) {
+        session.add_increased_memory_limit(&team, &app_id).await?;
+    }
     let b64 = base64::engine::general_purpose::STANDARD;
     let app = session.download_team_provisioning_profile(&team, &app_id, None).await?;
     let helper = session.download_team_provisioning_profile(&team, &helper_id, None).await?;
@@ -167,6 +196,7 @@ async fn profiles(req: ProfilesRequest) -> Result<Value, Report> {
         "ok": true,
         "app": b64.encode(app.encoded_profile.as_ref()),
         "helper": b64.encode(helper.encoded_profile.as_ref()),
+        "remade": missing,
     });
     let state = Zeroizing::new(storage.retrieve(ANISETTE_STATE_KEY)?.unwrap_or_default());
     if !state.is_empty() && *state != req.token.anisette_state {

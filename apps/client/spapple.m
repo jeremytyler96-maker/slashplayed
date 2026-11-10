@@ -133,7 +133,8 @@ NSString *sp_apple_token_forget(void) {
 }
 
 // The app's and its helper's renewed profiles from Apple, with the keychain's token, for team `team` and
-// the App IDs `app` and `app`.helper: @{@"app": NSData, @"helper": NSData}. Blocks on the network (up to a
+// the App IDs `app` and `app`.helper: @{@"app": NSData, @"helper": NSData, @"remade": the App IDs made again
+// because they'd lapsed}. Blocks on the network (up to a
 // minute or so): never on the main thread. Nil when it can't: *problem says why (no secret in it), and
 // *code is Apple's error number when Apple sent one. A re-provisioned anisette identity goes back into the
 // keychain with the token.
@@ -180,7 +181,8 @@ NSDictionary *sp_apple_profiles(NSString *team, NSString *app, NSString **proble
         *problem = @"Apple's reply had no profile";
         return nil;
     }
-    return @{@"app": a, @"helper": h};
+    NSArray *remade = [reply[@"remade"] isKindOfClass:NSArray.class] ? reply[@"remade"] : @[];
+    return @{@"app": a, @"helper": h, @"remade": remade};
 }
 
 // ---- Renewing the app's profiles at launch
@@ -315,7 +317,8 @@ void sp_profiles_renew(void (^pump)(double)) {
         write_state(refused ? @"signin" : @"failed", until);
         return;
     }
-    say([NSString stringWithFormat:@"Apple's profiles in %.2f s", CFAbsoluteTimeGetCurrent() - t]);
+    say([NSString stringWithFormat:@"Apple's profiles in %.2f s%@", CFAbsoluteTimeGetCurrent() - t,
+         [got[@"remade"] count] ? [NSString stringWithFormat:@", after making %lu lapsed App ID(s) again", (unsigned long)[got[@"remade"] count]] : @""]);
     NSString *problem = nil;
     NSArray *mine = sp_jit_profiles(@[got[@"app"], got[@"helper"]], pump, &problem);
     if (!mine) {
