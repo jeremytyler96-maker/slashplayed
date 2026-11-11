@@ -662,6 +662,16 @@ is unaffected. The game itself never gets the microphone; Slashplayed asks for i
 you hold Share and Circle on a PlayStation controller, for dictation into chat. Progress is
 tracked in [issue #12](https://github.com/paulstraw/slashplayed/issues/12).
 
+### Dictation pastes nothing
+
+Holding Share and Circle turns the microphone on (a red dot at the top right), but nothing lands in
+chat, and `Documents/spconsole.log` says `dictation: result (error kLSRErrorDomain 201: Siri and
+Dictation are disabled)`. The device's speech recognition refuses while **Siri** is off, even with
+keyboard Dictation on (seen on an iPad mini with iPadOS 26.7). Turn Siri on in Settings > Apple
+Intelligence & Siri; dictation works at once, no restart. Dictation also needs the microphone and
+speech recognition allowed for Slashplayed (Settings > Slashplayed), which it asks for on the first
+chord.
+
 ### The connection dropped while backgrounded
 
 The game resumes after a suspension, but the server connection often drops while it's away (seen
