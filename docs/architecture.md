@@ -893,7 +893,7 @@ and scroll events and `NSTextInputClient`), with no event taps. `spevent.m`:
   of at most 1000 characters, and one Cmd+V goes into the event queue. The session is PlayAndRecord
   (mixing, speaker, A2DP) only while recording. Permission is asked on the first chord. Share's system
   gesture (iOS's screenshot on a long press) is turned off, or a held Share would never reach the game.
-- **Touchpad swipes.** A one-finger swipe of half the touchpad within 0.6 s, with no click, presses F16
+- **Touchpad swipes.** A one-finger swipe of two-fifths of the touchpad within 0.6 s, with no click, presses F16
   (up), F17 (down), F18 (left), or F19 (right). Controllers are polled from the event pump rather than
   given handlers, since an element has one handler slot and the client's own would be replaced.
 - **Skipping a cinematic by touch.** The game's movie frame leaves a movie only on a key (Escape,
