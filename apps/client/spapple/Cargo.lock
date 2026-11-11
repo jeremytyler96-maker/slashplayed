@@ -2566,6 +2566,7 @@ dependencies = [
  "base64 0.22.1",
  "isideload",
  "plist",
+ "reqwest",
  "rootcause",
  "rustls",
  "serde",

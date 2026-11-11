@@ -9,7 +9,8 @@
 //     re-provisioned this device's machine identity, for the caller to store with the token. "remade" lists the
 //     App IDs that had lapsed and were made again first (a free team's last 7 days).
 // Every reply has "ok"; a failed one has "error" (for the log and the person) and, when Apple answered with
-// one, "code": its developer-services or GrandSlam error number.
+// one, "code": its developer-services or GrandSlam error number, and "http_status": the HTTP status of a
+// refusal from Apple's own servers (never another's, such as the anisette server's).
 //
 // The token is a credential (CLAUDE.md, "The Apple ID is a credential"): nothing here logs it or puts it in a
 // reply or an error, and its copies are zeroed when the request ends. No tracing subscriber is installed, so
@@ -127,6 +128,20 @@ fn apple_code(e: &Report) -> Option<i64> {
     })
 }
 
+/// The HTTP status of a refusal from Apple's own servers (developer services, GrandSlam) in a failure: a 401
+/// there is Apple not taking the token. Only an apple.com host's: the anisette server's refusals, and numbers
+/// in the error's text (a team or bundle ID, a URL), say nothing about the token.
+fn apple_http_status(e: &Report) -> Option<u16> {
+    e.iter_reports().find_map(|n| {
+        let r = n.downcast_current_context::<reqwest::Error>()?;
+        let host = r.url()?.host_str()?;
+        if host != "apple.com" && !host.ends_with(".apple.com") {
+            return None;
+        }
+        r.status().map(|s| s.as_u16())
+    })
+}
+
 async fn session(token: &Token, storage: &MemoryStorage) -> Result<DeveloperSession, Report> {
     if !token.anisette_state.is_empty() {
         storage.store(ANISETTE_STATE_KEY, &token.anisette_state)?;
@@ -238,6 +253,9 @@ fn call(request: &[u8]) -> Value {
             let mut v = json!({ "ok": false, "error": one_line(&e) });
             if let Some(code) = apple_code(&e) {
                 v["code"] = json!(code);
+            }
+            if let Some(status) = apple_http_status(&e) {
+                v["http_status"] = json!(status);
             }
             v
         }

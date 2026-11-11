@@ -135,10 +135,10 @@ NSString *sp_apple_token_forget(void) {
 // The app's and its helper's renewed profiles from Apple, with the keychain's token, for team `team` and
 // the App IDs `app` and `app`.helper: @{@"app": NSData, @"helper": NSData, @"remade": the App IDs made again
 // because they'd lapsed}. Blocks on the network (up to a
-// minute or so): never on the main thread. Nil when it can't: *problem says why (no secret in it), and
-// *code is Apple's error number when Apple sent one. A re-provisioned anisette identity goes back into the
-// keychain with the token.
-NSDictionary *sp_apple_profiles(NSString *team, NSString *app, NSString **problem, NSNumber **code) {
+// minute or so): never on the main thread. Nil when it can't: *problem says why (no secret in it), *code is
+// Apple's error number when Apple sent one, and *http the HTTP status when Apple's own servers refused the
+// request. A re-provisioned anisette identity goes back into the keychain with the token.
+NSDictionary *sp_apple_profiles(NSString *team, NSString *app, NSString **problem, NSNumber **code, NSNumber **http) {
     NSMutableData *blob = keychain_get();
     NSMutableDictionary *token = [parse(blob) mutableCopy];
     zero(blob);
@@ -162,6 +162,7 @@ NSDictionary *sp_apple_profiles(NSString *team, NSString *app, NSString **proble
     if (![reply[@"ok"] boolValue]) {
         *problem = [reply[@"error"] isKindOfClass:NSString.class] ? reply[@"error"] : @"no reason given";
         if ([reply[@"code"] isKindOfClass:NSNumber.class]) *code = reply[@"code"];
+        if ([reply[@"http_status"] isKindOfClass:NSNumber.class]) *http = reply[@"http_status"];
         return nil;
     }
     NSString *state = reply[@"anisette_state"];
@@ -276,13 +277,14 @@ static void prune_copies(void) {
 
 // Apple's refusals that mean the token itself no longer works, so only a new sign-in helps (as opposed to the
 // network or Apple being down, which the next launch retries). GrandSlam's auth errors, and the developer
-// services' "not signed in" family; anything unknown counts as a retry, never as a reason to ask.
-static BOOL token_refused(NSNumber *code, NSString *problem) {
-    if (code) {
-        long c = code.longValue;
-        if (c == 1100 || c == 1101 || c == 401 || (c <= -22000 && c > -23000)) return YES;
-    }
-    return [problem rangeOfString:@"401"].location != NSNotFound;
+// services' "not signed in" family, and a 401 from Apple's own servers (spapple's http_status, never another
+// server's). Never the problem's text: it names team and bundle IDs, URLs, and the anisette server's errors,
+// where a "401" says nothing about the token. Anything unknown counts as a retry, never as a reason to ask.
+static BOOL token_refused(NSNumber *code, NSNumber *http) {
+    if (http.integerValue == 401) return YES;
+    if (!code) return NO;
+    long c = code.longValue;
+    return c == 1100 || c == 1101 || c == 401 || (c <= -22000 && c > -23000);
 }
 
 // Every launch of a game, before the helper attaches: when the app's profiles have less than 3 days left
@@ -316,17 +318,17 @@ void sp_profiles_renew(void (^pump)(double)) {
     // 60 s: past that the launch goes on, since the profiles still have days left, and the next launch retries.
     __block NSDictionary *got = nil;
     __block NSString *why = nil;
-    __block NSNumber *code = nil;
+    __block NSNumber *code = nil, *http = nil;
     __block BOOL done = NO;
     NSObject *lock = [NSObject new];
     double t = CFAbsoluteTimeGetCurrent();
     NSString *team = [appid substringToIndex:dot.location], *bundle = [appid substringFromIndex:dot.location + 1];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *w = nil;
-        NSNumber *c = nil;
-        NSDictionary *g = sp_apple_profiles(team, bundle, &w, &c);
+        NSNumber *c = nil, *h = nil;
+        NSDictionary *g = sp_apple_profiles(team, bundle, &w, &c, &h);
         @synchronized (lock) {
-            got = g, why = w, code = c, done = YES;
+            got = g, why = w, code = c, http = h, done = YES;
         }
     });
     for (double end = CFAbsoluteTimeGetCurrent() + 60;;) {
@@ -341,9 +343,10 @@ void sp_profiles_renew(void (^pump)(double)) {
         pump(0.05);
     }
     if (!got) {
-        BOOL refused = token_refused(code, why);
-        say([NSString stringWithFormat:@"Apple's profiles didn't come after %.2f s (%@%@)%@", CFAbsoluteTimeGetCurrent() - t, why,
-             code ? [NSString stringWithFormat:@", code %@", code] : @"", refused ? @": the token no longer works" : @"; the next launch tries again"]);
+        BOOL refused = token_refused(code, http);
+        say([NSString stringWithFormat:@"Apple's profiles didn't come after %.2f s (%@%@%@)%@", CFAbsoluteTimeGetCurrent() - t, why,
+             code ? [NSString stringWithFormat:@", code %@", code] : @"", http ? [NSString stringWithFormat:@", HTTP %@", http] : @"",
+             refused ? @": the token no longer works" : @"; the next launch tries again"]);
         write_state(refused ? @"signin" : @"failed", until);
         return;
     }
