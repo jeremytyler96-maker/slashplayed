@@ -6,7 +6,20 @@ All notable changes to Slashplayed are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Cmd+V pastes your iPad's or iPhone's clipboard into the game's chat and other text boxes, and the
+  game's own copies land on the clipboard.
+- Controller dictation: hold Share (Create) and Circle on a PlayStation controller and speak; when you
+  let go, what you said is pasted into chat as one line, transcribed on your device. The first time, the
+  device asks for the microphone and speech recognition. Voice chat is still off: only this records.
+- Swiping on a DualSense or DualShock 4 touchpad presses F16 (up), F17 (down), F18 (left), or F19
+  (right), for addon key bindings.
+
 ### Changed
+
+- Holding Share on a PlayStation controller no longer takes a screenshot or starts a recording, so the
+  game sees it as a button you can hold.
 
 - A game patch no longer rebuilds and reinstalls Slashplayed. Play copies just the new game client to
   your iPad, iPhone, or Vision Pro, in a few seconds, and ticking or unticking a game no longer rebuilds

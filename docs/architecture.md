@@ -717,7 +717,7 @@ The hand-written families:
 |---|---|---|
 | `shims/system/` | libSystem | The JIT prepare and alias (above). Sandbox fixes: path redirection, shared memory, `SIGPIPE`. Tracing (`SP_SYSTEM_TRACE=1`). The device console log. |
 | `shims/appkit/` | AppKit | `spuikit.m` (the event loop coroutine), `spwindow.m` (screen, window, view geometry), `spevent.m` (input), `spimage.m` (bitmaps, images, cursors), `sphover.m` (look highlights), `spstats.m` (play-session stats), `sploading.m` (the loading screen
-until the client's first frame). `spnotice.m`, built into the CoreFoundation shim: the client's data setup dialog (below). |
+until the client's first frame), `spchipinput.m` (the clipboard, controller dictation, and touchpad swipes). `spnotice.m`, built into the CoreFoundation shim: the client's data setup dialog (below). |
 | `shims/coregraphics/` | CoreGraphics | `spdisplay.m`: one display matching NSScreen; cursor association and warping for mouselook. |
 | `shims/audio/` | CoreAudio, AudioToolbox | A fake HAL device, the macOS HAL output unit mapped to RemoteIO, and no microphone. |
 | `shims/security/` | Security | The client's legacy CSSM crypto calls over CommonCrypto; Secure Transport logging; the bundled root certificates for the client's certificate query. |
@@ -884,6 +884,18 @@ and scroll events and `NSTextInputClient`), with no event taps. `spevent.m`:
   with `contentsRect`, and places clear UIViews with a `hoverStyle` over the rects. The system draws
   its gaze glow on those, out of process. Addons don't run on the login and character screens, so
   those get no highlights.
+- **Clipboard.** `NSPasteboard` is the general pasteboard over `UIPasteboard`, text only
+  (`spchipinput.m`); a nil type is text, and `NSPasteboardTypeString` has macOS's value. Pasting another
+  app's text shows iOS's Allow Paste prompt unless Settings > Slashplayed > Paste from Other Apps allows it.
+- **Controller dictation.** Holding Share (Create, GameController's `buttonOptions`) and Circle
+  (`buttonB`) records with `AVAudioEngine` and transcribes with `SFSpeechRecognizer`, on the device only
+  (SpeechAnalyzer is Swift-only); on release and a 250 ms tail the text goes to the clipboard as one line
+  of at most 1000 characters, and one Cmd+V goes into the event queue. The session is PlayAndRecord
+  (mixing, speaker, A2DP) only while recording. Permission is asked on the first chord. Share's system
+  gesture (iOS's screenshot on a long press) is turned off, or a held Share would never reach the game.
+- **Touchpad swipes.** A one-finger swipe of half the touchpad within 0.6 s, with no click, presses F16
+  (up), F17 (down), F18 (left), or F19 (right). Controllers are polled from the event pump rather than
+  given handlers, since an element has one handler slot and the client's own would be replaced.
 - **Skipping a cinematic by touch.** The game's movie frame leaves a movie only on a key (Escape,
   Space, or Enter opens its skip dialog, whose Yes and No are clickable). The `SPMovie` addon, on
   every device, has the frame take clicks and opens that dialog on one, so a tap does what Escape
@@ -910,9 +922,9 @@ and scroll events and `NSTextInputClient`), with no event taps. `spevent.m`:
 - **No voice chat, no microphone.** On the Mac the client runs voice chat in a separate helper app
   (`WowVoiceProxy.app`, with the Vivox SDK) that it launches at world entry and talks to across
   processes. The device can't launch it ([One app, every game](#one-app-every-game)) and the app
-  doesn't bundle it, so the client reports it couldn't start it (VoiceError 14). The app has no
-  `NSMicrophoneUsageDescription`, and without one TCC kills the process on any request for audio
-  input, so nothing may ask: after the client loads, the launcher has the AudioToolbox shim make
+  doesn't bundle it, so the client reports it couldn't start it (VoiceError 14). The app's
+  `NSMicrophoneUsageDescription` is for controller dictation only (without one TCC kills the process on
+  any request for audio input), and the client mustn't record or prompt: after the client loads, the launcher has the AudioToolbox shim make
   `AVCaptureDevice`'s permission calls answer "denied" for audio and video (an initializer is too
   early: AVFoundation installs its own methods over them), and the shim refuses input on an output
   unit and the voice-processing unit. The fake HAL device touches no hardware. Running the helper
