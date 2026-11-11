@@ -193,6 +193,7 @@ static SFSpeechRecognitionTask *sp_dict_task;
 static NSString *sp_dict_text;  // the latest transcription, partial until the final one
 static NSTimeInterval sp_dict_started;
 static BOOL sp_chord_held;
+static const NSTimeInterval sp_chord_grace = 0.2; // s the chord must stay apart to count as let go (sp_chip_poll)
 static __weak GCController *sp_dict_controller;
 
 static const char *sp_dict_err(NSError *e) {
@@ -416,13 +417,14 @@ static void sp_dict_chord_up(void) {
 //
 // The touchpad's primary finger is a dpad, -1..1 on each axis, and reads 0,0 with no finger on it. A
 // contact runs from the first sample off 0,0 to the first back on it. It's a swipe when the larger axis
-// travelled at least half the pad (1.0) and the finger lifted within 0.6 s, with no touchpad click and
+// travelled at least 0.8 (two-fifths of the pad) and the finger lifted within 0.6 s, with no touchpad click and
 // no second finger at any point: a tap or a click never moves that far, and a slow drag (the touchpad
 // cursor) takes longer. +y is up, as for GameController's dpads. A jump of most of the pad between two
 // samples is a new finger, not a swipe (in case a lift ever goes unseen between samples).
 
 enum { SP_F16 = 0x6A, SP_F17 = 0x40, SP_F18 = 0x4F, SP_F19 = 0x50 };
-static const float sp_swipe_travel = 1.0f, sp_swipe_jump = 0.9f;
+// 0.8 of the pad's 2.0 (11 Nov 2026, first device test: swipes of 0.95 read as nothing).
+static const float sp_swipe_travel = 0.8f, sp_swipe_jump = 0.9f;
 static const NSTimeInterval sp_swipe_time = 0.6;
 
 @interface SPChipPad : NSObject {
@@ -541,11 +543,36 @@ static void sp_chip_poll(void) {
             sp_swipe_sample(p, ds.touchpadPrimary, ds.touchpadSecondary, ds.touchpadButton, now);
         }
     }
-    if (chord && !sp_chord_held) {
-        sp_chord_held = YES;
-        sp_dict_chord_down(chord);
-    } else if (!chord && sp_chord_held) {
-        sp_chord_held = NO;
-        sp_dict_chord_up();
+    // A release counts only once the chord has stayed apart for sp_chord_grace (11 Nov 2026, chip-input,
+    // the first device test): every recording stopped 0.2-0.3 s in with the buttons held, so one of the
+    // two reads up for a sample or two mid-hold. Which one, and how long the chord lasted, is logged.
+    static NSTimeInterval chord_t0, apart_since;
+    static BOOL share_was, circle_was;
+    if (chord) {
+        apart_since = 0;
+        share_was = circle_was = YES;
+        if (!sp_chord_held) {
+            sp_chord_held = YES;
+            chord_t0 = now;
+            sp_dict_chord_down(chord);
+        }
+    } else if (sp_chord_held) {
+        if (apart_since == 0) {
+            apart_since = now;
+            BOOL share = NO, circle = NO;
+            for (GCController *c in sp_chip_controllers) {
+                share = share || c.extendedGamepad.buttonOptions.isPressed;
+                circle = circle || c.extendedGamepad.buttonB.isPressed;
+            }
+            share_was = share;
+            circle_was = circle;
+        }
+        if (now - apart_since >= sp_chord_grace) {
+            sp_chord_held = NO;
+            sp_chip_say(@"dictation: chord up after %.2f s (first to let go: %s)", apart_since - chord_t0,
+                        !share_was && !circle_was ? "both" : (!share_was ? "Share" : "Circle"));
+            apart_since = 0;
+            sp_dict_chord_up();
+        }
     }
 }
