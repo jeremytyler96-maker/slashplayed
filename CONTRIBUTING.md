@@ -19,12 +19,14 @@ Install these first:
   a Vision Pro, an M1-or-later iPad or the A17 Pro iPad mini, or an iPhone 15 Pro or later, paired, with Developer Mode on;
   and [LocalDevVPN](https://apps.apple.com/app/id6755608044) on the device.
 
-Then, from a fresh clone (idevice and the font are once, and again after their pins change):
+Then, from a fresh clone (idevice, spapple, and the font are once, and again after their pins change;
+spapple also after a change to `apps/client/spapple`):
 
 ```sh
 scripts/build-idevice.sh macos   # idevice, from source, into work/idevice/
 scripts/build-idevice.sh ios
 scripts/build-idevice.sh xros
+scripts/build-spapple.sh         # the device app's profile renewal, from source, into work/spapple/
 scripts/fetch-font.sh            # the start screen's font, into work/fonts/
 apps/companion/build.sh          # build/companion/Slashplayed Companion.app, shims included
 apps/companion/test.sh           # the companion's unit tests
