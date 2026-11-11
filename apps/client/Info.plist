@@ -21,6 +21,11 @@
 	     local network access. Only visionOS browses: an iPad or iPhone gets its pairing from the Mac. -->
 	<key>NSBonjourServices</key><array><string>_remotepairing-manual-pairing._tcp</string></array>
 	<key>NSLocalNetworkUsageDescription</key><string>Slashplayed finds Remote Devices in Settings to pair with this Vision Pro, so it can prepare the game without a Mac.</string>
+	<!-- Dictation into chat (chip-input, shims/appkit/spchipinput.m), asked on the first Share and Circle chord.
+	     Only that code records: the game's own requests for the microphone are still answered "denied"
+	     (shims/audio/spaudiotoolbox.m), so voice chat stays off. -->
+	<key>NSMicrophoneUsageDescription</key><string>Glyph dictation: hold Share and Circle to speak into chat.</string>
+	<key>NSSpeechRecognitionUsageDescription</key><string>Glyph dictation: hold Share and Circle to speak into chat. Speech is transcribed on this device.</string>
 	<!-- LocalDevVPN's localdevvpn://enable?scheme=slashplayed turns it on and opens this, back to the app (spvpn.m). -->
 	<key>CFBundleURLTypes</key><array><dict>
 		<key>CFBundleURLName</key><string>slashplayed</string>

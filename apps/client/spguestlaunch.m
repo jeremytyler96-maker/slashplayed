@@ -158,10 +158,10 @@ int sp_guest_main(NSString *path, int argc, char **argv, NSString **problem) {
         *problem = @(err);
         return 1;
     }
-    // Every image the client links is initialized now. No microphone: the app has no
-    // NSMicrophoneUsageDescription (voice chat can't work on the device), so a capture permission request
-    // would get the process killed; the AudioToolbox shim makes AVCaptureDevice answer "denied"
-    // (spaudiotoolbox.m says why).
+    // Every image the client links is initialized now. No microphone for the client: voice chat can't
+    // work on the device, and before the app had NSMicrophoneUsageDescription (chip-input's dictation,
+    // 11 Nov 2026) a capture permission request got the process killed; now it would prompt for nothing.
+    // The AudioToolbox shim makes AVCaptureDevice answer "denied" (spaudiotoolbox.m says why).
     void (*no_mic)(void) = dlsym(RTLD_DEFAULT, "sp_audio_no_microphone");
     if (no_mic) no_mic();
     else say(@"audio: can't refuse the microphone: voice chat settings may stop the app");

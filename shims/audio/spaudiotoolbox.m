@@ -28,9 +28,11 @@ static int sp_frame_dladdr(const void *pc, Dl_info *info) {
 static void sp_audio_resume(const char *why);
 
 // ---- no microphone. Voice chat can't work on the device: on the Mac the client runs it in a separate
-// helper app it launches, and the device can't launch one. So the app has no
-// NSMicrophoneUsageDescription, and without it TCC kills the process (__abort_with_payload) the moment
-// anything asks for audio input: no prompt, no error. Every way the client could get there is closed:
+// helper app it launches, and the device can't launch one. Without NSMicrophoneUsageDescription TCC
+// kills the process (__abort_with_payload) the moment anything asks for audio input: no prompt, no
+// error. Since chip-input (11 Nov 2026) the app has one, for the AppKit shim's controller dictation
+// (spchipinput.m), which records through the real AVFAudio, not through this shim. The client still
+// mustn't record or prompt, so every way it could get there stays closed:
 // - AVCaptureDevice (AVFoundation, which the client links directly, unshimmed): the client imports
 //   authorizationStatusForMediaType: and requestAccessForMediaType:completionHandler: with
 //   AVMediaTypeAudio and AVMediaTypeVideo. sp_audio_no_microphone makes both answer "denied" (there's
