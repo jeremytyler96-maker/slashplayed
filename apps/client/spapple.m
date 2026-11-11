@@ -249,12 +249,16 @@ static void write_state(NSString *word, NSDate *until) {
 
 // What the start screen says under the games about the renewal, from Library/sprenew.txt: nothing when it's
 // fine (or nothing's been tried yet), else why the app may stop opening, with the day, in the person's words.
+// The file is only written at a game's launch, so it's checked against the profiles the app has now: once
+// they last past the day it names (the companion signed the app again, as the note asks), it's stale.
 NSString *sp_profiles_note(void) {
     NSString *line = [NSString stringWithContentsOfFile:home(@"Library/sprenew.txt") encoding:NSUTF8StringEncoding error:nil];
     NSArray *parts = [[line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] componentsSeparatedByString:@" "];
     if (parts.count != 2 || [parts[0] isEqual:@"ok"]) return nil;
     NSDate *until = [[NSISO8601DateFormatter new] dateFromString:parts[1]];
     if (until && until.timeIntervalSinceNow < 0) return nil;  // past it the app doesn't open, so a note left is stale
+    NSDate *now = sp_profile_expiry();
+    if (now && (until ? [now compare:until] == NSOrderedDescending : now.timeIntervalSinceNow > renew_within)) return nil;
     NSString *when = @"soon";
     if (until && [NSCalendar.currentCalendar isDateInToday:until]) when = @"later today";
     else if (until && [NSCalendar.currentCalendar isDateInTomorrow:until]) when = @"tomorrow";
