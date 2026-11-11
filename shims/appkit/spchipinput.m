@@ -193,6 +193,8 @@ static SFSpeechRecognitionTask *sp_dict_task;
 static NSString *sp_dict_text;  // the latest transcription, partial until the final one
 static NSTimeInterval sp_dict_started;
 static BOOL sp_chord_held;
+static volatile unsigned sp_dict_buffers; // audio buffers handed to the request this recording
+static volatile float sp_dict_peak;       // its loudest sample, 0..1
 static const NSTimeInterval sp_chord_grace = 0.2; // s the chord must stay apart to count as let go (sp_chip_poll)
 static __weak GCController *sp_dict_controller;
 
@@ -243,7 +245,7 @@ static void sp_dict_stop_audio(void) {
     sp_dict_engine = nil;
     sp_dict_session(NO);
     sp_chip_show_dot(NO);
-    sp_chip_say(@"dictation: stop, %.1f s recorded", NSProcessInfo.processInfo.systemUptime - sp_dict_started);
+    sp_chip_say(@"dictation: stop, %.1f s recorded, %u buffers, peak %.3f", NSProcessInfo.processInfo.systemUptime - sp_dict_started, sp_dict_buffers, sp_dict_peak);
 }
 
 static void sp_dict_cancel(const char *why) {
@@ -306,14 +308,25 @@ static void sp_dict_record(void) {
     sp_dict_task = [rec recognitionTaskWithRequest:request resultHandler:^(SFSpeechRecognitionResult *r, NSError *e) {
         NSString *text = r.bestTranscription.formattedString;
         BOOL final = r.isFinal;
-        NSString *err = e ? [NSString stringWithFormat:@"error %@ %ld", e.domain, (long)e.code] : nil;
+        // iOS's own words for the failure (11 Nov 2026: "kLSRErrorDomain 201" alone was misread as Dictation being off,
+        // and it was on). The description is the framework's, never the transcript.
+        NSString *err = e ? [NSString stringWithFormat:@"error %@ %ld: %@", e.domain, (long)e.code, e.localizedDescription] : nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             if (gen != sp_dict_gen) return;
             if (text) sp_dict_text = text;
             if (final || err) sp_dict_finish(gen, final ? "final" : err.UTF8String);
         });
     }];
+    // How much audio reached the request, and how loud it got: told at the stop (sp_dict_buffers, sp_dict_peak).
+    sp_dict_buffers = 0;
+    sp_dict_peak = 0;
     [input installTapOnBus:0 bufferSize:1024 format:format block:^(AVAudioPCMBuffer *buf, AVAudioTime *when) {
+        sp_dict_buffers++;
+        float *ch = buf.floatChannelData ? buf.floatChannelData[0] : NULL;
+        for (AVAudioFrameCount i = 0; ch && i < buf.frameLength; i++) {
+            float v = fabsf(ch[i]);
+            if (v > sp_dict_peak) sp_dict_peak = v;
+        }
         [request appendAudioPCMBuffer:buf];
     }];
     [engine prepare];
